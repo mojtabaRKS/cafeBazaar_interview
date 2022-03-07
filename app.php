@@ -1,8 +1,9 @@
 <?php
 
-// design patterns used in this file:
-// - singleton
-// - command
+/**  design patterns used in this file:
+ *      - singleton
+ *      - command
+ */
 
 // ---------------- Helpers Start ----------------
 if (!function_exists('secondsToTime')) {
@@ -19,9 +20,13 @@ if (!function_exists('secondsToTime')) {
 // ---------------- Helpers End ----------------
 
 // ---------------- Contracts Start ----------------
-abstract class Action
+interface Command
 {
-    public abstract function perform();
+    public function perform();
+}
+
+abstract class Action implements Command
+{
 }
 
 abstract class Model
@@ -45,26 +50,46 @@ abstract class Model
     // our database is a simple array because we don't need any persistence and complex queries.
     private array $db = [];
 
+    /**
+     * The Singleton's instance is stored in a static field. This field is an
+     * array, because we'll allow our Singleton to have subclasses. Each item in
+     * this array will be an instance of a specific Singleton's subclass. You'll
+     * see how this works in a moment.
+     */
     private static $instances = [];
 
-    protected function __construct()
+    /**
+     * The Singleton's constructor should always be private to prevent direct
+     * construction calls with the `new` operator.
+     */
+    private function __construct()
     {
     }
 
+    /**
+     * Singletons should not be cloneable.
+     */
     protected function __clone()
     {
     }
 
+    /**
+     * Singletons should not be restorable from strings.
+     */
     public function __wakeup()
     {
         throw new \Exception("Cannot unserialize singleton");
     }
 
-    public function getDb(): array
-    {
-        return $this->db[$this->collection];
-    }
-
+    /**
+     * This is the static method that controls the access to the singleton
+     * instance. On the first run, it creates a singleton object and places it
+     * into the static field. On subsequent runs, it returns the client existing
+     * object stored in the static field.
+     *
+     * This implementation lets you subclass the Singleton class while keeping
+     * just one instance of each subclass around.
+     */
     public static function getInstance(): self
     {
         $subclass = static::class;
@@ -73,6 +98,11 @@ abstract class Model
         }
 
         return self::$instances[$subclass];
+    }
+
+    public function getDb(): array
+    {
+        return $this->db[$this->collection];
     }
 
     protected abstract function fill();
@@ -229,6 +259,7 @@ class PathAction extends Action
         }
 
         $paths = $this->findPaths($source_id, $destination_id);
+        
         foreach ($paths as $path) {
             // here we should divide road length by speed limit and convert it to 3600 (1 hour -> 3600 seconds)
             $time = secondsToTime(($path['length'] / $path['speed_limit']) * 3600);
@@ -245,6 +276,7 @@ class PathAction extends Action
     protected function findPaths($source_id, $destination_id)
     {
         $roads = Road::getInstance()->getDb();
+
         $paths = [];
         foreach ($roads as $road) {
             $road['through'] = array_unique(array_merge([$road['from']], $road['through'], [$road['to']]));
@@ -311,7 +343,10 @@ class Kernel
 
             if (array_key_exists($choice, $this->mainMenu)) {
                 $action = $this->mainMenu[$choice] . 'Action';
-                (new $action)->perform();
+                $action = new $action;
+                if ($action instanceof Action) {
+                    $action->perform();
+                }
             }
         } while ($choice != self::EXIT_CHOICE);
     }
