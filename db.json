@@ -1,0 +1,1 @@
+{"cities":{"21":{"id":"21","name":"Tehran"},"251":{"id":"251","name":"Qom"},"361":{"id":"361","name":"Kashan"}},"roads":{"1":{"id":"1","name":"T-K","from":"21","to":"361","through":["21","251"],"speed_limit":"80","length":"600","bi_directional":"1"}}}

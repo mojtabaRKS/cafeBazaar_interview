@@ -17,6 +17,20 @@ if (!function_exists('secondsToTime')) {
         return $from->diff($to)->format('%D:%H:%i');
     }
 }
+
+if (!function_exists('dd')) {
+    /**
+     * Convert seconds to DD:HH:MM
+     */
+    function dd(...$vars)
+    {
+        foreach ($vars as $var) {
+            var_dump($var);
+        }
+
+        die;
+    }
+}
 // ---------------- Helpers End ----------------
 
 // ---------------- Contracts Start ----------------
@@ -105,6 +119,12 @@ abstract class Model
         return $this->db[$this->collection];
     }
 
+    public function setDb(array $data): self
+    {
+        $this->db[$this->collection] = $data;
+        return $this;
+    }
+
     protected abstract function fill();
 
     public static function chooseModel()
@@ -155,7 +175,7 @@ abstract class Model
 // ----------------------------------------------------
 class City extends Model
 {
-    protected $collection = 'cities';
+    public $collection = 'cities';
 
     protected $modelName = __CLASS__;
 
@@ -177,7 +197,7 @@ class City extends Model
 
 class Road extends Model
 {
-    protected $collection = 'roads';
+    public $collection = 'roads';
 
     protected $modelName = __CLASS__;
 
@@ -259,7 +279,7 @@ class PathAction extends Action
         }
 
         $paths = $this->findPaths($source_id, $destination_id);
-        
+
         foreach ($paths as $path) {
             // here we should divide road length by speed limit and convert it to 3600 (1 hour -> 3600 seconds)
             $time = secondsToTime(($path['length'] / $path['speed_limit']) * 3600);
@@ -279,6 +299,9 @@ class PathAction extends Action
 
         $paths = [];
         foreach ($roads as $road) {
+            // dest: 1
+            // source : 2
+            // through :[1] + [2 ,3, 4] + [2] = [1, 2, 3, 4]
             $road['through'] = array_unique(array_merge([$road['from']], $road['through'], [$road['to']]));
             $paths[] = $this->checkRoad($road, $source_id, $destination_id, $road['bi_directional']);
         }
@@ -291,11 +314,16 @@ class PathAction extends Action
      */
     protected function checkRoad($road, $source_id, $destination_id, $biDirectional)
     {
+        if (!in_array($source_id, $road['through']) || !in_array($destination_id, $road['through'])) {
+            return;
+        }
+
         if (!$biDirectional) {
             $sourceIndex = array_search($source_id, $road['through']);
             $destinationIndex = array_search($destination_id, $road['through']);
             return ($sourceIndex < $destinationIndex) ? $road : null;
         }
+
         return $road;
     }
 }
@@ -316,6 +344,63 @@ class ExitAction extends Action
         exit;
     }
 }
+
+class DatabaseAction extends Action
+{
+    protected const SAVE_OPTION_LABEL = 'Save';
+    protected const LOAD_OPTION_LABEL = 'Load';
+
+    protected const SAVE_OPTION = 1;
+    protected const LOAD_OPTION = 2;
+
+    protected $options = [
+        self::SAVE_OPTION => self::SAVE_OPTION_LABEL,
+        self::LOAD_OPTION => self::LOAD_OPTION_LABEL,
+    ];
+
+    private $filePath = 'db.json';
+
+    public function perform()
+    {
+        echo "choose your action: " . PHP_EOL;
+        foreach ($this->options as $key => $value) {
+            echo "{$key} - {$value}" . PHP_EOL;
+        }
+
+        $option = (int) trim(readline());
+
+        if (! array_key_exists($option , $this->options)) {
+            echo "your choose is invalid !" . PHP_EOL;
+            $this->perform();
+        }
+
+        $method = 'handle' . $this->options[$option];
+        $this->$method();
+    }
+
+    protected function handleLoad()
+    {
+        $database = json_decode(file_get_contents($this->filePath), true);
+        $models = array_values(Model::CLASS_MAP);
+
+        foreach($models as $model) {
+            $modelObject =  $model::getInstance();
+            $modelObject->setDb($database[$modelObject->collection]);
+        }
+    }
+
+    protected function handleSave()
+    {   
+        $models = array_values(Model::CLASS_MAP);
+        $db = [];
+        foreach($models as $model) {
+            $modelObject =  $model::getInstance();
+            $db[$modelObject->collection] = $modelObject->getDb();
+        }
+
+        file_put_contents($this->filePath , json_encode($db));
+    }
+}
 // ---------------- Actions Layer End ----------------
 
 // ---------------- Application Start ----------------
@@ -329,6 +414,7 @@ class Kernel
         3 => 'Delete',
         4 => 'Path',
         5 => 'Exit',
+        6 => 'Database'
     ];
 
     /**
